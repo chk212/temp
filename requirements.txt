@@ -1,0 +1,6 @@
+discord.py
+openpyxl
+python-dotenv 
+Flask
+pandas
+flask-cors 

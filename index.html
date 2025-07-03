@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Historique des charges</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(120deg, #e0eafc 0%, #cfdef3 100%);
+            margin: 0;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto 0 auto;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 6px 32px #0002;
+            padding: 36px 32px 32px 32px;
+        }
+        h1 {
+            color: #217dbb;
+            text-align: center;
+            margin-bottom: 32px;
+            letter-spacing: 1px;
+        }
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 32px;
+            justify-content: center;
+            background: #f4fafd;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px #0001;
+            padding: 18px 0 12px 0;
+            margin-bottom: 28px;
+        }
+        .stat-item {
+            color: #217dbb;
+            font-size: 1.13em;
+            min-width: 180px;
+            text-align: center;
+        }
+        #charges-par-mois {
+            background: #f8fafc;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px #0001;
+            padding: 14px 18px 10px 18px;
+            margin-bottom: 28px;
+            font-size: 1.05em;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        #charges-par-mois ul {
+            padding-left: 18px;
+            margin: 8px 0 0 0;
+        }
+        #charges-par-mois li {
+            margin-bottom: 2px;
+        }
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 12px #0001;
+        }
+        th, td {
+            padding: 12px 8px;
+            text-align: center;
+        }
+        th {
+            background: #217dbb;
+            color: #fff;
+            font-weight: 600;
+            border-bottom: 2px solid #15608a;
+        }
+        tr:nth-child(even) td {
+            background: #f4fafd;
+        }
+        tr:hover td {
+            background: #e3f1fa;
+            transition: background 0.2s;
+        }
+        @media (max-width: 700px) {
+            .container { padding: 10px 2vw; }
+            .stats { flex-direction: column; gap: 12px; }
+            th, td { font-size: 0.98em; padding: 8px 2px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Historique des charges</h1>
+        <div class="stats" id="stats">
+            <div class="stat-item"><b>Temps moyen :</b> <span id="avg-time">...</span></div>
+            <div class="stat-item"><b>Total charges :</b> <span id="total-charges">...</span></div>
+            <div class="stat-item"><b>Charges ce mois :</b> <span id="charges-month">...</span></div>
+            <div class="stat-item"><b>Dernière charge :</b> <span id="last-charge">...</span></div>
+        </div>
+        <div id="charges-par-mois"></div>
+        <table id="charges-table">
+            <thead>
+                <tr id="table-header"></tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+    </div>
+    <script>
+        function formatDuree(minutes) {
+            const h = Math.floor(minutes / 60);
+            const m = Math.round(minutes % 60);
+            if (h > 0) return `${h}h${m.toString().padStart(2, '0')}`;
+            return `${m} min`;
+        }
+
+        fetch('http://localhost:5000/charges')
+            .then(response => response.json())
+            .then(data => {
+                if (!Array.isArray(data)) {
+                    document.body.innerHTML += '<p>Erreur lors du chargement des données.</p>';
+                    return;
+                }
+                if (data.length === 0) {
+                    document.getElementById('table-body').innerHTML = '<tr><td colspan="3">Aucune donnée</td></tr>';
+                    return;
+                }
+                // Trier les données par date décroissante
+                data.sort((a, b) => (b["Date"] || '').localeCompare(a["Date"] || ''));
+                // Statistiques
+                const totalCharges = data.length;
+                const totalMinutes = data.reduce((sum, row) => sum + Number(row["Durée (minutes)"] || 0), 0);
+                const avgMinutes = totalMinutes / totalCharges;
+                // Charges ce mois-ci
+                const now = new Date();
+                const moisCourant = now.toISOString().slice(0,7); // "YYYY-MM"
+                const chargesMois = data.filter(row => (row["Date"]||'').slice(0,7) === moisCourant).length;
+                // Dernière charge (date la plus récente)
+                const dates = data.map(row => row["Date"]).filter(Boolean).sort();
+                const lastDate = dates.length ? dates[dates.length-1] : '...';
+                document.getElementById('avg-time').textContent = isNaN(avgMinutes) ? '...' : formatDuree(avgMinutes);
+                document.getElementById('total-charges').textContent = totalCharges;
+                document.getElementById('charges-month').textContent = chargesMois;
+                document.getElementById('last-charge').textContent = lastDate;
+                // Charges par mois
+                const moisCount = {};
+                data.forEach(row => {
+                    const mois = (row["Date"]||'').slice(0,7);
+                    if (mois) moisCount[mois] = (moisCount[mois]||0) + 1;
+                });
+                // Affichage charges par mois
+                let moisHtml = '<b>Nombre de charges par mois :</b><ul>';
+                Object.keys(moisCount).sort().forEach(mois => {
+                    moisHtml += `<li>${mois} : <b>${moisCount[mois]}</b></li>`;
+                });
+                moisHtml += '</ul>';
+                document.getElementById('charges-par-mois').innerHTML = moisHtml;
+                // Générer l'en-tête
+                const headerRow = document.getElementById('table-header');
+                Object.keys(data[0]).forEach(key => {
+                    const th = document.createElement('th');
+                    th.textContent = key;
+                    headerRow.appendChild(th);
+                });
+                // Générer le corps du tableau
+                const tbody = document.getElementById('table-body');
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    Object.values(row).forEach(val => {
+                        const td = document.createElement('td');
+                        td.textContent = val;
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(err => {
+                document.body.innerHTML += '<p>Erreur lors de la récupération des données.</p>';
+            });
+    </script>
+</body>
+</html>
